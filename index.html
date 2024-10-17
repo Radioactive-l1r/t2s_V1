@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text-to-Speech Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        textarea {
+            width: 100%;
+            max-width: 600px;
+            height: 100px;
+            padding: 10px;
+            border: 2px solid #007bff;
+            border-radius: 5px;
+            font-size: 16px;
+            margin-bottom: 15px;
+            resize: none;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin: 5px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 90%;
+            max-width: 400px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        #searchVoices {
+            width: 90%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 2px solid #007bff;
+            border-radius: 5px;
+        }
+
+        .voice-option {
+            padding: 10px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .voice-option:hover {
+            background-color: #f0f0f0;
+        }
+
+        .voice-option:last-child {
+            border-bottom: none; /* Remove border from last option */
+        }
+
+        .voice-list {
+            max-height: 200px; /* Set a max height for the voice list */
+            overflow-y: auto; /* Allow scrolling if necessary */
+        }
+
+        @media (max-width: 600px) {
+            textarea, button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Text-to-Speech Example</h1>
+    <textarea id="text" placeholder="Enter text here..."></textarea>
+    <button id="selectVoiceBtn">Select Voice</button>
+    <div>
+        <button id="speakBtn">Play</button>
+        <button id="pauseBtn" style="display:none;">Pause</button>
+        <button id="resumeBtn" style="display:none;">Resume</button>
+        <button id="resetBtn">Reset</button>
+    </div>
+
+    <!-- Modal for selecting voices -->
+    <div id="voiceModal" class="modal">
+        <div class="modal-content">
+            <span id="closeModal" style="cursor:pointer; float:right;">&times;</span>
+            <input type="text" id="searchVoices" placeholder="Search voices...">
+            <div id="voiceList" class="voice-list"></div>
+        </div>
+    </div>
+
+    <script>
+        const textArea = document.getElementById('text');
+        const selectVoiceBtn = document.getElementById('selectVoiceBtn');
+        const speakBtn = document.getElementById('speakBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const resumeBtn = document.getElementById('resumeBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const voiceModal = document.getElementById('voiceModal');
+        const closeModal = document.getElementById('closeModal');
+        const voiceList = document.getElementById('voiceList');
+        const searchVoices = document.getElementById('searchVoices');
+
+        let voices = [];
+        let utterance = null;
+        let selectedVoice = null;
+
+        function populateVoiceList() {
+            voices = speechSynthesis.getVoices();
+            voiceList.innerHTML = '';
+
+            voices.forEach((voice) => {
+                const div = document.createElement('div');
+                div.className = 'voice-option';
+                div.textContent = `${voice.name} (${voice.lang})`;
+                div.onclick = () => selectVoice(voice);
+                voiceList.appendChild(div);
+            });
+        }
+
+        speechSynthesis.onvoiceschanged = populateVoiceList;
+
+        function selectVoice(voice) {
+            selectedVoice = voice;
+            selectVoiceBtn.textContent = `Selected: ${voice.name}`;
+            voiceModal.style.display = 'none';
+        }
+
+        selectVoiceBtn.addEventListener('click', () => {
+            voiceModal.style.display = 'block';
+            populateVoiceList();  // Refresh the voice list
+        });
+
+        closeModal.addEventListener('click', () => {
+            voiceModal.style.display = 'none';
+        });
+
+        searchVoices.addEventListener('input', () => {
+            const searchTerm = searchVoices.value.toLowerCase();
+            const options = voiceList.querySelectorAll('.voice-option');
+
+            options.forEach(option => {
+                const text = option.textContent.toLowerCase();
+                option.style.display = text.includes(searchTerm) ? 'block' : 'none';
+            });
+        });
+
+        speakBtn.addEventListener('click', () => {
+            if (utterance) {
+                speechSynthesis.cancel();
+            }
+            if (selectedVoice) {
+                utterance = new SpeechSynthesisUtterance(textArea.value);
+                utterance.voice = selectedVoice;
+                speechSynthesis.speak(utterance);
+                pauseBtn.style.display = 'inline-block';  // Show pause button
+                speakBtn.style.display = 'none';           // Hide play button
+            } else {
+                alert("Please select a voice.");
+            }
+        });
+
+        pauseBtn.addEventListener('click', () => {
+            speechSynthesis.pause();
+            pauseBtn.style.display = 'none';           // Hide pause button
+            resumeBtn.style.display = 'inline-block';  // Show resume button
+        });
+
+        resumeBtn.addEventListener('click', () => {
+            speechSynthesis.resume();
+            resumeBtn.style.display = 'none';          // Hide resume button
+            pauseBtn.style.display = 'inline-block';    // Show pause button
+        });
+
+        resetBtn.addEventListener('click', () => {
+            speechSynthesis.cancel();  // Stop any ongoing speech
+            textArea.value = '';  // Clear the text area
+            selectedVoice = null; // Reset selected voice
+            selectVoiceBtn.textContent = 'Select Voice'; // Reset button text
+            pauseBtn.style.display = 'none'; // Hide pause button
+            resumeBtn.style.display = 'none'; // Hide resume button
+            speakBtn.style.display = 'inline-block'; // Show play button
+        });
+
+        // Populate voice list on page load
+        window.onload = populateVoiceList;
+    </script>
+</body>
+</html>
