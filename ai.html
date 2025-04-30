@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Text-to-Speech Example</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #2a2a2a;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 {
+      color: #ffffff;
+    }
+
+    textarea {
+      width: 100%;
+      max-width: 600px;
+      height: 100px;
+      padding: 10px;
+      border: 2px solid #fefefe;
+      border-radius: 5px;
+      font-size: 16px;
+      margin-bottom: 15px;
+      resize: none;
+    }
+
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      background-color: #ffffff;
+      color: #202020;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      margin: 5px;
+    }
+
+    button:hover {
+      background-color: #707173;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.5);
+    }
+
+    .modal-content {
+      background-color: #545454;
+      margin: 10% auto;
+      padding: 20px;
+      border: 1px solid #ffffff;
+      width: 90%;
+      max-width: 400px;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    #searchVoices {
+      width: 90%;
+      padding: 10px;
+      margin-bottom: 10px;
+      border: 2px solid #007bff;
+      border-radius: 5px;
+    }
+
+    .voice-option {
+      padding: 10px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .voice-option:hover {
+      background-color: #f0f0f0;
+    }
+
+    .voice-option:last-child {
+      border-bottom: none;
+    }
+
+    .voice-list {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    @media (max-width: 600px) {
+      textarea, button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Text-to-Speech Example</h1>
+  <textarea id="text" placeholder="Enter text here..."></textarea>
+  <button id="selectVoiceBtn">Select Voice</button>
+  <div>
+    <button id="speakBtn">Play</button>
+    <button id="pauseBtn" style="display:none;">Pause</button>
+    <button id="resumeBtn" style="display:none;">Resume</button>
+    <button id="resetBtn">Reset</button>
+    <button id="recordBtn">Record & Download</button>
+  </div>
+
+  <!-- Modal for selecting voices -->
+  <div id="voiceModal" class="modal">
+    <div class="modal-content">
+      <span id="closeModal" style="cursor:pointer; float:right;">&times;</span>
+      <input type="text" id="searchVoices" placeholder="Search voices...">
+      <div id="voiceList" class="voice-list"></div>
+    </div>
+  </div>
+
+  <script>
+    const textArea = document.getElementById('text');
+    const selectVoiceBtn = document.getElementById('selectVoiceBtn');
+    const speakBtn = document.getElementById('speakBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resumeBtn = document.getElementById('resumeBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const recordBtn = document.getElementById('recordBtn');
+    const voiceModal = document.getElementById('voiceModal');
+    const closeModal = document.getElementById('closeModal');
+    const voiceList = document.getElementById('voiceList');
+    const searchVoices = document.getElementById('searchVoices');
+
+    let voices = [];
+    let utterance = null;
+    let selectedVoice = null;
+
+    function populateVoiceList() {
+      voices = speechSynthesis.getVoices();
+      voiceList.innerHTML = '';
+
+      voices.forEach((voice) => {
+        const div = document.createElement('div');
+        div.className = 'voice-option';
+        div.textContent = `${voice.name} (${voice.lang})`;
+        div.onclick = () => selectVoice(voice);
+        voiceList.appendChild(div);
+      });
+    }
+
+    speechSynthesis.onvoiceschanged = populateVoiceList;
+
+    function selectVoice(voice) {
+      selectedVoice = voice;
+      selectVoiceBtn.textContent = `Selected: ${voice.name}`;
+      voiceModal.style.display = 'none';
+    }
+
+    selectVoiceBtn.addEventListener('click', () => {
+      voiceModal.style.display = 'block';
+      populateVoiceList();
+    });
+
+    closeModal.addEventListener('click', () => {
+      voiceModal.style.display = 'none';
+    });
+
+    searchVoices.addEventListener('input', () => {
+      const searchTerm = searchVoices.value.toLowerCase();
+      const options = voiceList.querySelectorAll('.voice-option');
+      options.forEach(option => {
+        const text = option.textContent.toLowerCase();
+        option.style.display = text.includes(searchTerm) ? 'block' : 'none';
+      });
+    });
+
+    speakBtn.addEventListener('click', () => {
+      if (utterance) {
+        speechSynthesis.cancel();
+      }
+      if (selectedVoice) {
+        utterance = new SpeechSynthesisUtterance(textArea.value);
+        utterance.voice = selectedVoice;
+        speechSynthesis.speak(utterance);
+        pauseBtn.style.display = 'inline-block';
+        speakBtn.style.display = 'none';
+      } else {
+        alert("Please select a voice.");
+      }
+    });
+
+    pauseBtn.addEventListener('click', () => {
+      speechSynthesis.pause();
+      pauseBtn.style.display = 'none';
+      resumeBtn.style.display = 'inline-block';
+    });
+
+    resumeBtn.addEventListener('click', () => {
+      speechSynthesis.resume();
+      resumeBtn.style.display = 'none';
+      pauseBtn.style.display = 'inline-block';
+    });
+
+    resetBtn.addEventListener('click', () => {
+      speechSynthesis.cancel();
+      textArea.value = '';
+      selectedVoice = null;
+      selectVoiceBtn.textContent = 'Select Voice';
+      pauseBtn.style.display = 'none';
+      resumeBtn.style.display = 'none';
+      speakBtn.style.display = 'inline-block';
+    });
+
+    // --- RECORDING LOGIC ---
+    recordBtn.addEventListener('click', async () => {
+      if (!selectedVoice) {
+        alert("Please select a voice first.");
+        return;
+      }
+
+      const text = textArea.value.trim();
+      if (!text) {
+        alert("Please enter some text.");
+        return;
+      }
+
+      const synth = window.speechSynthesis;
+      const audioContext = new AudioContext();
+      const dest = audioContext.createMediaStreamDestination();
+
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.voice = selectedVoice;
+
+      const source = audioContext.createMediaStreamSource(dest.stream);
+      const recorder = new MediaRecorder(dest.stream);
+      const chunks = [];
+
+      recorder.ondataavailable = e => chunks.push(e.data);
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'tts-recording.webm';
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const synthUtterance = utter;
+      const synthAudio = new SpeechSynthesisUtterance(text);
+
+      const utterThis = utter;
+      window.speechSynthesis.cancel(); // Just in case
+
+      const tempUtter = utter;
+      const originalSpeak = speechSynthesis.speak;
+      const backup = speechSynthesis;
+
+      // Connect workaround
+      const utteranceAudio = new SpeechSynthesisUtterance(text);
+      utteranceAudio.voice = selectedVoice;
+
+      // Use Web Audio routing
+      const originalSpeakMethod = speechSynthesis.speak;
+      speechSynthesis.speak = function(u) {
+        const audio = new Audio();
+        audio.src = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+      }
+
+      // Actually speak and record
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.voice = selectedVoice;
+
+      const synthNode = audioContext.createMediaStreamDestination();
+      const mediaRecorder = new MediaRecorder(synthNode.stream);
+      const recordedChunks = [];
+
+      const utteranceSource = audioContext.createMediaStreamSource(synthNode.stream);
+      mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'tts-recording.webm';
+        link.click();
+      };
+
+      const audioElement = new Audio();
+      const mediaStreamDestination = audioContext.createMediaStreamDestination();
+      const utteranceClone = new SpeechSynthesisUtterance(text);
+      utteranceClone.voice = selectedVoice;
+
+      const audioTrack = mediaStreamDestination.stream.getAudioTracks()[0];
+
+      mediaRecorder.start();
+      speechSynthesis.speak(utteranceClone);
+
+      utteranceClone.onend = () => {
+        setTimeout(() => mediaRecorder.stop(), 500);
+      };
+    });
+
+    window.onload = populateVoiceList;
+  </script>
+</body>
+</html>
