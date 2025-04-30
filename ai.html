@@ -83,10 +83,11 @@
       cursor: pointer;
       transition: background-color 0.3s;
       border-bottom: 1px solid #ddd;
+      color: #ffffff;
     }
 
     .voice-option:hover {
-      background-color: #f0f0f0;
+      background-color: #707070;
     }
 
     .voice-option:last-child {
@@ -96,6 +97,12 @@
     .voice-list {
       max-height: 200px;
       overflow-y: auto;
+    }
+
+    #status {
+      color: #ffffff;
+      margin: 10px 0;
+      font-weight: bold;
     }
 
     @media (max-width: 600px) {
@@ -116,11 +123,12 @@
     <button id="resetBtn">Reset</button>
     <button id="recordBtn">Record & Download</button>
   </div>
+  <div id="status"></div>
 
   <!-- Modal for selecting voices -->
   <div id="voiceModal" class="modal">
     <div class="modal-content">
-      <span id="closeModal" style="cursor:pointer; float:right;">&times;</span>
+      <span id="closeModal" style="cursor:pointer; float:right; color: white;">&times;</span>
       <input type="text" id="searchVoices" placeholder="Search voices...">
       <div id="voiceList" class="voice-list"></div>
     </div>
@@ -138,10 +146,14 @@
     const closeModal = document.getElementById('closeModal');
     const voiceList = document.getElementById('voiceList');
     const searchVoices = document.getElementById('searchVoices');
+    const statusDiv = document.getElementById('status');
 
     let voices = [];
     let utterance = null;
     let selectedVoice = null;
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
 
     function populateVoiceList() {
       voices = speechSynthesis.getVoices();
@@ -156,7 +168,10 @@
       });
     }
 
-    speechSynthesis.onvoiceschanged = populateVoiceList;
+    // Ensure voices are loaded
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+      speechSynthesis.onvoiceschanged = populateVoiceList;
+    }
 
     function selectVoice(voice) {
       selectedVoice = voice;
@@ -171,6 +186,13 @@
 
     closeModal.addEventListener('click', () => {
       voiceModal.style.display = 'none';
+    });
+
+    // Close modal when clicking outside
+    window.addEventListener('click', (event) => {
+      if (event.target === voiceModal) {
+        voiceModal.style.display = 'none';
+      }
     });
 
     searchVoices.addEventListener('input', () => {
@@ -217,9 +239,10 @@
       pauseBtn.style.display = 'none';
       resumeBtn.style.display = 'none';
       speakBtn.style.display = 'inline-block';
+      statusDiv.textContent = '';
     });
 
-    // --- RECORDING LOGIC ---
+    // Recording functionality using audio context
     recordBtn.addEventListener('click', async () => {
       if (!selectedVoice) {
         alert("Please select a voice first.");
@@ -232,84 +255,91 @@
         return;
       }
 
-      const synth = window.speechSynthesis;
-      const audioContext = new AudioContext();
-      const dest = audioContext.createMediaStreamDestination();
+      try {
+        // Create audio context
+        const audioContext = new AudioContext();
+        
+        // Set up audio processing
+        const audioDestination = audioContext.createMediaStreamDestination();
+        audioChunks = [];
+        
+        // Create media recorder
+        mediaRecorder = new MediaRecorder(audioDestination.stream);
+        
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunks.push(event.data);
+          }
+        };
+        
+        mediaRecorder.onstop = () => {
+          const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          
+          // Create download link
+          const downloadLink = document.createElement('a');
+          downloadLink.href = audioUrl;
+          downloadLink.download = 'speech-recording.wav';
+          
+          // Trigger download
+          downloadLink.click();
+          
+          // Clean up
+          URL.revokeObjectURL(audioUrl);
+          statusDiv.textContent = "Recording saved!";
+          setTimeout(() => {
+            statusDiv.textContent = "";
+          }, 3000);
+        };
+        
+        // Start recording
+        statusDiv.textContent = "Recording...";
+        mediaRecorder.start();
+        
+        // Create an HTML5 audio element to play the speech
+        const audio = document.createElement('audio');
+        audio.srcObject = audioDestination.stream;
+        
+        // Create speech utterance
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.voice = selectedVoice;
+        
+        // When speech ends, stop recording
+        utter.onend = () => {
+          // Give a small delay to capture trailing audio
+          setTimeout(() => {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+              mediaRecorder.stop();
+              statusDiv.textContent = "Processing recording...";
+            }
+          }, 500);
+        };
 
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.voice = selectedVoice;
-
-      const source = audioContext.createMediaStreamSource(dest.stream);
-      const recorder = new MediaRecorder(dest.stream);
-      const chunks = [];
-
-      recorder.ondataavailable = e => chunks.push(e.data);
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'tts-recording.webm';
-        a.click();
-        URL.revokeObjectURL(url);
-      };
-
-      const synthUtterance = utter;
-      const synthAudio = new SpeechSynthesisUtterance(text);
-
-      const utterThis = utter;
-      window.speechSynthesis.cancel(); // Just in case
-
-      const tempUtter = utter;
-      const originalSpeak = speechSynthesis.speak;
-      const backup = speechSynthesis;
-
-      // Connect workaround
-      const utteranceAudio = new SpeechSynthesisUtterance(text);
-      utteranceAudio.voice = selectedVoice;
-
-      // Use Web Audio routing
-      const originalSpeakMethod = speechSynthesis.speak;
-      speechSynthesis.speak = function(u) {
-        const audio = new Audio();
-        audio.src = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+        // Handle errors
+        utter.onerror = (err) => {
+          statusDiv.textContent = `Error: ${err.message}`;
+          if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+          }
+        };
+        
+        // Speak the text
+        speechSynthesis.speak(utter);
+        
+      } catch (error) {
+        console.error("Recording failed:", error);
+        statusDiv.textContent = `Recording failed: ${error.message}`;
       }
-
-      // Actually speak and record
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.voice = selectedVoice;
-
-      const synthNode = audioContext.createMediaStreamDestination();
-      const mediaRecorder = new MediaRecorder(synthNode.stream);
-      const recordedChunks = [];
-
-      const utteranceSource = audioContext.createMediaStreamSource(synthNode.stream);
-      mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(recordedChunks, { type: 'audio/webm' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'tts-recording.webm';
-        link.click();
-      };
-
-      const audioElement = new Audio();
-      const mediaStreamDestination = audioContext.createMediaStreamDestination();
-      const utteranceClone = new SpeechSynthesisUtterance(text);
-      utteranceClone.voice = selectedVoice;
-
-      const audioTrack = mediaStreamDestination.stream.getAudioTracks()[0];
-
-      mediaRecorder.start();
-      speechSynthesis.speak(utteranceClone);
-
-      utteranceClone.onend = () => {
-        setTimeout(() => mediaRecorder.stop(), 500);
-      };
     });
 
-    window.onload = populateVoiceList;
+    // Initialize
+    window.onload = () => {
+      populateVoiceList();
+      if (voices.length === 0) {
+        // If voices aren't loaded yet, try again in a moment
+        setTimeout(populateVoiceList, 1000);
+      }
+    };
   </script>
 </body>
 </html>
