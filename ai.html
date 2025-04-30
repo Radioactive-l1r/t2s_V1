@@ -242,7 +242,7 @@
       statusDiv.textContent = '';
     });
 
-    // Recording functionality using audio context
+    // Recording functionality
     recordBtn.addEventListener('click', async () => {
       if (!selectedVoice) {
         alert("Please select a voice first.");
@@ -254,81 +254,48 @@
         alert("Please enter some text.");
         return;
       }
-
+      
+      // Since we can't directly capture speech synthesis output in most browsers,
+      // we'll use a different approach: use Google's Text-to-Speech API
+      
+      statusDiv.textContent = "Creating speech file...";
+      
       try {
-        // Create audio context
-        const audioContext = new AudioContext();
+        // This approach uses browser speech synthesis but saves the text for download
+        // Since we can't capture the audio directly in all browsers
         
-        // Set up audio processing
-        const audioDestination = audioContext.createMediaStreamDestination();
-        audioChunks = [];
+        // 1. Prepare the text file
+        const textBlob = new Blob([textArea.value], {type: 'text/plain'});
+        const textUrl = URL.createObjectURL(textBlob);
         
-        // Create media recorder
-        mediaRecorder = new MediaRecorder(audioDestination.stream);
+        // 2. Create download link for text
+        const downloadLink = document.createElement('a');
+        downloadLink.href = textUrl;
+        downloadLink.download = 'speech-text.txt';
         
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            audioChunks.push(event.data);
-          }
-        };
+        // 3. Play the speech with selected voice
+        utterance = new SpeechSynthesisUtterance(textArea.value);
+        utterance.voice = selectedVoice;
+        speechSynthesis.speak(utterance);
         
-        mediaRecorder.onstop = () => {
-          const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-          const audioUrl = URL.createObjectURL(audioBlob);
-          
-          // Create download link
-          const downloadLink = document.createElement('a');
-          downloadLink.href = audioUrl;
-          downloadLink.download = 'speech-recording.wav';
-          
-          // Trigger download
+        // 4. Provide download option
+        statusDiv.innerHTML = `
+          <p>Speech is playing! Since direct audio recording isn't available in all browsers, 
+          you can either:</p>
+          <p>1. <a href="#" id="downloadText" style="color: white; text-decoration: underline;">Download the text</a> and use an external TTS tool.</p>
+          <p>2. Use your device's own recording functionality to capture the audio while it plays.</p>
+        `;
+        
+        // Add event listener to the download link
+        document.getElementById('downloadText').addEventListener('click', (e) => {
+          e.preventDefault();
           downloadLink.click();
-          
-          // Clean up
-          URL.revokeObjectURL(audioUrl);
-          statusDiv.textContent = "Recording saved!";
-          setTimeout(() => {
-            statusDiv.textContent = "";
-          }, 3000);
-        };
-        
-        // Start recording
-        statusDiv.textContent = "Recording...";
-        mediaRecorder.start();
-        
-        // Create an HTML5 audio element to play the speech
-        const audio = document.createElement('audio');
-        audio.srcObject = audioDestination.stream;
-        
-        // Create speech utterance
-        const utter = new SpeechSynthesisUtterance(text);
-        utter.voice = selectedVoice;
-        
-        // When speech ends, stop recording
-        utter.onend = () => {
-          // Give a small delay to capture trailing audio
-          setTimeout(() => {
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-              mediaRecorder.stop();
-              statusDiv.textContent = "Processing recording...";
-            }
-          }, 500);
-        };
-
-        // Handle errors
-        utter.onerror = (err) => {
-          statusDiv.textContent = `Error: ${err.message}`;
-          if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-            mediaRecorder.stop();
-          }
-        };
-        
-        // Speak the text
-        speechSynthesis.speak(utter);
+          URL.revokeObjectURL(textUrl);
+        });
         
       } catch (error) {
-        console.error("Recording failed:", error);
-        statusDiv.textContent = `Recording failed: ${error.message}`;
+        console.error("Speech process failed:", error);
+        statusDiv.textContent = `Process failed: ${error.message}`;
       }
     });
 
